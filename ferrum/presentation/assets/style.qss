@@ -1,15 +1,14 @@
 /* ==========================================================================
-   FERRUM POS - Modern Industrial Theme
-   Palette: Dark Slate (#0f172a, #1e293b), Border (#334155), Emerald (#10b981)
+   FERRUM POS - Modern Industrial Theme (Clean & High Contrast)
    ========================================================================== */
 
-QMainWindow {
+QMainWindow, QDialog {
     background-color: #0b0f19;
 }
 
 QWidget {
     color: #f1f5f9;
-    font-family: 'Segoe UI', 'Ubuntu', 'Helvetica Neue', sans-serif;
+    font-family: 'Segoe UI', 'Ubuntu', sans-serif;
     font-size: 13px;
 }
 
@@ -20,8 +19,8 @@ QFrame#sidebar {
 }
 
 QLabel#brand_title {
-    font-size: 16px;
-    font-weight: 800;
+    font-size: 18px;
+    font-weight: 900;
     color: #f8fafc;
     letter-spacing: 0.5px;
 }
@@ -29,7 +28,7 @@ QLabel#brand_title {
 QLabel#brand_subtitle {
     font-size: 11px;
     color: #64748b;
-    font-weight: 500;
+    font-weight: 600;
     text-transform: uppercase;
 }
 
@@ -39,7 +38,7 @@ QPushButton.nav_button {
     color: #94a3b8;
     border: none;
     border-radius: 8px;
-    padding: 10px 16px;
+    padding: 12px 16px;
     text-align: left;
     font-size: 13px;
     font-weight: 600;
@@ -67,22 +66,22 @@ QFrame.kpi_card {
 QLabel.kpi_title {
     font-size: 11px;
     color: #94a3b8;
-    font-weight: 600;
+    font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
 
 QLabel.kpi_value {
     font-size: 22px;
-    font-weight: 700;
+    font-weight: 800;
     color: #f8fafc;
 }
 
-/* Tablas Modernas */
+/* Tablas Modernas y Encabezados */
 QTableWidget {
     background-color: #0f172a;
     border: 1px solid #1e293b;
-    border-radius: 10px;
+    border-radius: 8px;
     gridline-color: #1e293b;
     outline: none;
     selection-background-color: #1e293b;
@@ -90,7 +89,7 @@ QTableWidget {
 }
 
 QTableWidget::item {
-    padding: 10px;
+    padding: 8px 12px;
     border-bottom: 1px solid #1e293b;
 }
 
@@ -101,9 +100,58 @@ QHeaderView::section {
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    padding: 12px 10px;
+    padding: 10px 14px;
     border: none;
     border-bottom: 2px solid #1e293b;
+}
+
+/* Campos de entrada e Inputs */
+QLineEdit, QDoubleSpinBox {
+    background-color: #0f172a;
+    color: #f8fafc;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 13px;
+}
+
+QLineEdit:focus, QDoubleSpinBox:focus {
+    border: 1px solid #38bdf8;
+    background-color: #0b132b;
+}
+
+/* Desplegables (QComboBox sin líneas blancas) */
+QComboBox {
+    background-color: #0f172a;
+    color: #f8fafc;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 13px;
+}
+
+QComboBox:focus {
+    border: 1px solid #38bdf8;
+}
+
+QComboBox::drop-down {
+    border: none;
+    padding-right: 10px;
+}
+
+QComboBox QAbstractItemView {
+    background-color: #0f172a;
+    color: #f8fafc;
+    border: 1px solid #334155;
+    selection-background-color: #0284c7;
+    selection-color: #ffffff;
+    outline: none;
+    padding: 4px;
+}
+
+QComboBox QAbstractItemView::item {
+    padding: 8px 12px;
+    border-radius: 4px;
 }
 
 /* Botón Primario */
@@ -111,7 +159,7 @@ QPushButton#btn_primary {
     background-color: #0284c7;
     color: #ffffff;
     border: none;
-    border-radius: 8px;
+    border-radius: 6px;
     padding: 9px 18px;
     font-weight: 700;
     font-size: 13px;
@@ -121,28 +169,10 @@ QPushButton#btn_primary:hover {
     background-color: #0369a1;
 }
 
-QPushButton#btn_primary:pressed {
-    background-color: #075985;
-}
-
-/* Barra de estado inferior */
-QFrame#status_bar {
-    background-color: #0f172a;
-    border-top: 1px solid #1e293b;
-    padding: 4px 12px;
-}
-
-QLabel.status_text {
-    font-size: 11px;
-    color: #64748b;
-    font-family: monospace;
-}
-
 /* Diálogos y Alertas (QMessageBox) */
 QMessageBox {
     background-color: #1e293b;
     border: 1px solid #334155;
-    border-radius: 8px;
 }
 
 QMessageBox QLabel {
@@ -163,4 +193,41 @@ QMessageBox QPushButton {
 
 QMessageBox QPushButton:hover {
     background-color: #0369a1;
+}
+
+/* Forzar tema oscuro completo para SpinBoxes */
+QSpinBox, QDoubleSpinBox {
+    background-color: #0f172a;
+    color: #f8fafc;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+QSpinBox:focus, QDoubleSpinBox:focus {
+    border: 1px solid #38bdf8;
+    background-color: #0b132b;
+}
+
+QSpinBox::up-button, QDoubleSpinBox::up-button,
+QSpinBox::down-button, QDoubleSpinBox::down-button {
+    background-color: #1e293b;
+    border: none;
+    width: 18px;
+}
+
+QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
+QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {
+    background-color: #334155;
+}
+
+/* Ocultar totalmente las flechas de los SpinBoxes */
+QSpinBox::up-button, QSpinBox::down-button,
+QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {
+    width: 0px;
+    height: 0px;
+    border: none;
+    background: transparent;
 }
