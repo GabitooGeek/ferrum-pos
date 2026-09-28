@@ -1,7 +1,7 @@
 """
 ferrum.presentation.views.main_window
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-Ventana principal formateada para Pesos Colombianos (COP).
+Ventana principal con Punto de Venta, Inventario, Cerberus CCTV y Cierre de Caja.
 """
 from pathlib import Path
 from PySide6.QtCore import Qt
@@ -26,6 +26,7 @@ from ferrum.infrastructure.database.models import Product
 from ferrum.presentation.components.product_modal import ProductModal
 from ferrum.presentation.views.cctv_view import CCTVView
 from ferrum.presentation.views.pos_view import POSView
+from ferrum.presentation.views.reports_view import ReportsView
 
 
 class KPICard(QFrame):
@@ -60,18 +61,23 @@ class MainWindow(QMainWindow):
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
 
+        # 1. Contenedor de Vistas
         self.stack = QStackedWidget()
-        self.view_pos = POSView(on_sale_completed_callback=self.load_inventory_data)
+        self.view_pos = POSView(on_sale_completed_callback=self._on_sale_completed)
         self.view_inventory = self._build_inventory_view()
         self.view_cctv = CCTVView()
+        self.view_reports = ReportsView()
 
-        self.stack.addWidget(self.view_pos)
-        self.stack.addWidget(self.view_inventory)
-        self.stack.addWidget(self.view_cctv)
+        self.stack.addWidget(self.view_pos)        # 0
+        self.stack.addWidget(self.view_inventory)  # 1
+        self.stack.addWidget(self.view_reports)    # 2
+        self.stack.addWidget(self.view_cctv)       # 3
 
+        # 2. Sidebar
         sidebar = self._build_sidebar()
         root_layout.addWidget(sidebar)
 
+        # 3. Contenedor Central
         content_container = QWidget()
         content_layout = QVBoxLayout(content_container)
         content_layout.setContentsMargins(28, 20, 28, 0)
@@ -100,6 +106,7 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(16, 24, 16, 24)
         layout.setSpacing(8)
 
+        # Logo
         brand_icon = QLabel("FERRUM")
         brand_icon.setObjectName("brand_title")
         brand_sub = QLabel("Industrial POS & CCTV")
@@ -122,17 +129,24 @@ class MainWindow(QMainWindow):
         self.btn_inv.setProperty("class", "nav_button")
         self.btn_inv.clicked.connect(lambda: self.stack.setCurrentIndex(1))
 
+        self.btn_rep = QPushButton("📊  Cierre de Caja")
+        self.btn_rep.setCheckable(True)
+        self.btn_rep.setProperty("class", "nav_button")
+        self.btn_rep.clicked.connect(self._open_reports_tab)
+
         self.btn_cctv = QPushButton("📹  Cerberus CCTV")
         self.btn_cctv.setCheckable(True)
         self.btn_cctv.setProperty("class", "nav_button")
-        self.btn_cctv.clicked.connect(lambda: self.stack.setCurrentIndex(2))
+        self.btn_cctv.clicked.connect(lambda: self.stack.setCurrentIndex(3))
 
         self.nav_group.addButton(self.btn_pos)
         self.nav_group.addButton(self.btn_inv)
+        self.nav_group.addButton(self.btn_rep)
         self.nav_group.addButton(self.btn_cctv)
 
         layout.addWidget(self.btn_pos)
         layout.addWidget(self.btn_inv)
+        layout.addWidget(self.btn_rep)
         layout.addWidget(self.btn_cctv)
         layout.addStretch()
 
@@ -141,6 +155,10 @@ class MainWindow(QMainWindow):
         layout.addWidget(ver_lbl)
 
         return sidebar
+
+    def _open_reports_tab(self) -> None:
+        self.view_reports.load_report_data()
+        self.stack.setCurrentIndex(2)
 
     def _build_inventory_view(self) -> QWidget:
         view = QWidget()
@@ -234,6 +252,10 @@ class MainWindow(QMainWindow):
         layout.addWidget(status_right)
         return bar
 
+    def _on_sale_completed(self) -> None:
+        self.load_inventory_data()
+        self.view_reports.load_report_data()
+
     def load_inventory_data(self) -> None:
         self.table.setRowCount(0)
         total_items = 0
@@ -247,30 +269,24 @@ class MainWindow(QMainWindow):
                 self.table.insertRow(row)
                 total_value += float(p.stock) * float(p.sale_price)
 
-                # SKU
                 item_sku = QTableWidgetItem(f" {p.sku} ")
                 item_sku.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 self.table.setItem(row, 0, item_sku)
 
-                # Descripción
                 self.table.setItem(row, 1, QTableWidgetItem(f" {p.name}"))
 
-                # Unidad
                 item_unit = QTableWidgetItem(f" {p.unit.value} ")
                 item_unit.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 self.table.setItem(row, 2, item_unit)
 
-                # Costo COP entero
                 item_cost = QTableWidgetItem(f"${p.cost_price:,.0f} ".replace(",", "."))
                 item_cost.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                 self.table.setItem(row, 3, item_cost)
 
-                # Precio Venta COP entero
                 item_price = QTableWidgetItem(f"${p.sale_price:,.0f} ".replace(",", "."))
                 item_price.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                 self.table.setItem(row, 4, item_price)
 
-                # Stock
                 item_stock = QTableWidgetItem(f"{p.stock:,.2f} ")
                 item_stock.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                 self.table.setItem(row, 5, item_stock)

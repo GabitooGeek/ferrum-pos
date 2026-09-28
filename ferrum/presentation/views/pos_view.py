@@ -1,10 +1,10 @@
 """
 ferrum.presentation.views.pos_view
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-Terminal de cobro con campos limpios y moneda COP.
+Terminal de cobro con receptor de ráfaga para pistolas láser de códigos de barra.
 """
 from typing import List
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, QObject, Qt, QTimer
 from PySide6.QtWidgets import (
     QAbstractSpinBox,
     QDoubleSpinBox,
@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from ferrum.application.services.sale_service import CartItemDTO, SaleService
+from ferrum.presentation.components.receipt_modal import ReceiptModal
 
 
 class POSView(QWidget):
@@ -30,7 +31,17 @@ class POSView(QWidget):
         super().__init__(parent)
         self.on_sale_completed_callback = on_sale_completed_callback
         self.cart: List[CartItemDTO] = []
+        
+        # Buffer para captura de ráfagas rápidas de pistola láser
+        self._scanner_buffer = ""
+        self._scanner_timer = QTimer(self)
+        self._scanner_timer.setInterval(60)  # Ventana de 60ms entre caracteres de pistola
+        self._scanner_timer.setSingleShot(True)
+        self._scanner_timer.timeout.connect(self._clear_scanner_buffer)
+
         self._setup_ui()
+        # Instalar filtro de eventos para escuchar la pistola en cualquier parte de la ventana
+        self.installEventFilter(self)
 
     def _setup_ui(self) -> None:
         main_layout = QHBoxLayout(self)
@@ -57,7 +68,7 @@ class POSView(QWidget):
         input_layout.setSpacing(10)
 
         self.input_search = QLineEdit()
-        self.input_search.setPlaceholderText("Escanear Código o SKU (ej. CAB-001, PUN-002)...")
+        self.input_search.setPlaceholderText("🔴 Listo para pistola láser o escribir SKU (ej. CAB-001)...")
         self.input_search.returnPressed.connect(self.add_product_to_cart)
         input_layout.addWidget(self.input_search, stretch=3)
 
@@ -193,8 +204,11 @@ class POSView(QWidget):
 
         main_layout.addWidget(checkout_panel, stretch=1)
 
-    def add_product_to_cart(self) -> None:
-        query = self.input_search.text().strip()
+    def _clear_scanner_buffer(self) -> None:
+        self._scanner_buffer = ""
+
+    def add_product_to_cart(self, code_override: str | None = None) -> None:
+        query = code_override if code_override else self.input_search.text().strip()
         if not query:
             return
 
@@ -293,14 +307,18 @@ class POSView(QWidget):
             QMessageBox.warning(self, "Pago Insuficiente", "El dinero recibido es menor al total a cobrar.")
             return
 
+        items_for_receipt = list(self.cart)
+
         ok, msg, sale = SaleService.process_sale(self.cart)
         if ok and sale:
-            change_val = cash - total
-            QMessageBox.information(
-                self,
-                "Venta Exitosa",
-                f"✅ {msg}\n\nTotal Cobrado: ${total:,.0f}\nCambio entregado: ${change_val:,.0f}".replace(",", ".")
+            receipt_modal = ReceiptModal(
+                invoice_number=sale.invoice_number,
+                items=items_for_receipt,
+                cash_received=cash,
+                parent=self
             )
+            receipt_modal.exec()
+
             self.cart.clear()
             self.input_cash.clear()
             self._refresh_cart_table()
