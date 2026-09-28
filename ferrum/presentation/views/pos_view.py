@@ -1,12 +1,13 @@
 """
 ferrum.presentation.views.pos_view
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-Terminal de cobro con cantidades y stock en números enteros.
+Terminal de cobro completa con métodos de pago colombianos (Efectivo, Nequi, Tarjeta, Fiado, Mixto).
 """
 from typing import List
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractSpinBox,
+    QComboBox,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -22,7 +23,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ferrum.application.services.sale_service import CartItemDTO, SaleService
+from ferrum.application.services.sale_service import CartItemDTO, PaymentInfoDTO, SaleService
+from ferrum.infrastructure.database.models import PaymentMethod
 from ferrum.presentation.components.receipt_modal import ReceiptModal
 
 
@@ -38,7 +40,9 @@ class POSView(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(20)
 
-        # Panel Izquierdo
+        # =========================================================================
+        # PANEL IZQUIERDO: Buscador de Pistola Láser y Carrito
+        # =========================================================================
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(0, 0, 0, 0)
@@ -58,7 +62,7 @@ class POSView(QWidget):
         input_layout.setSpacing(10)
 
         self.input_search = QLineEdit()
-        self.input_search.setPlaceholderText("Escanear Código o SKU (ej. CAB-001, PUN-002)...")
+        self.input_search.setPlaceholderText("🔴 Listo para pistola láser o SKU (ej. CAB-001, PUN-002)...")
         self.input_search.returnPressed.connect(self.add_product_to_cart)
         input_layout.addWidget(self.input_search, stretch=3)
 
@@ -66,7 +70,6 @@ class POSView(QWidget):
         lbl_qty.setStyleSheet("font-weight: 700; color: #94a3b8;")
         input_layout.addWidget(lbl_qty)
 
-        # Selector de Cantidad en Enteros (1, 2, 5, 10)
         self.spin_qty = QSpinBox()
         self.spin_qty.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         self.spin_qty.setRange(1, 10000)
@@ -119,7 +122,9 @@ class POSView(QWidget):
 
         main_layout.addWidget(left_panel, stretch=2)
 
-        # Panel Derecho (Cobro COP)
+        # =========================================================================
+        # PANEL DERECHO: Métodos de Pago Colombianos y Cobro
+        # =========================================================================
         checkout_panel = QFrame()
         checkout_panel.setStyleSheet("""
             QFrame {
@@ -129,47 +134,88 @@ class POSView(QWidget):
             }
         """)
         checkout_layout = QVBoxLayout(checkout_panel)
-        checkout_layout.setContentsMargins(20, 24, 20, 24)
-        checkout_layout.setSpacing(16)
+        checkout_layout.setContentsMargins(20, 20, 20, 20)
+        checkout_layout.setSpacing(14)
 
         lbl_checkout = QLabel("CAJA REGISTRADORA (COP)")
         lbl_checkout.setStyleSheet("font-size: 13px; font-weight: 800; color: #94a3b8; letter-spacing: 1px;")
         checkout_layout.addWidget(lbl_checkout)
 
+        # Tarjeta de Gran Total
         total_card = QFrame()
-        total_card.setStyleSheet("background-color: #0f172a; border-radius: 8px; padding: 14px; border: 1px solid #334155;")
+        total_card.setStyleSheet("background-color: #0f172a; border-radius: 8px; padding: 12px; border: 1px solid #334155;")
         total_card_layout = QVBoxLayout(total_card)
         
         lbl_total_title = QLabel("TOTAL A COBRAR")
         lbl_total_title.setStyleSheet("color: #94a3b8; font-size: 11px; font-weight: bold;")
         self.lbl_grand_total = QLabel("$ 0")
-        self.lbl_grand_total.setStyleSheet("color: #10b981; font-size: 32px; font-weight: 900;")
+        self.lbl_grand_total.setStyleSheet("color: #10b981; font-size: 28px; font-weight: 900;")
         total_card_layout.addWidget(lbl_total_title)
         total_card_layout.addWidget(self.lbl_grand_total)
         checkout_layout.addWidget(total_card)
 
-        grid_pay = QGridLayout()
-        grid_pay.setSpacing(12)
+        # Selector de Método de Pago
+        lbl_method = QLabel("Forma de Pago:")
+        lbl_method.setStyleSheet("font-size: 12px; font-weight: 700; color: #cbd5e1;")
+        checkout_layout.addWidget(lbl_method)
 
-        lbl_received = QLabel("Efectivo Recibido ($):")
-        lbl_received.setStyleSheet("font-size: 13px; font-weight: 600; color: #cbd5e1;")
-        
+        self.combo_payment = QComboBox()
+        self.combo_payment.addItem("💵  Efectivo", PaymentMethod.CASH)
+        self.combo_payment.addItem("📲  Nequi / Daviplata", PaymentMethod.NEQUI_DAVIPLATA)
+        self.combo_payment.addItem("💳  Tarjeta / Datáfono", PaymentMethod.CARD)
+        self.combo_payment.addItem("📝  Crédito / Fiado", PaymentMethod.CREDIT)
+        self.combo_payment.addItem("🔀  Pago Mixto (Efectivo + Transf.)", PaymentMethod.MIXED)
+        self.combo_payment.currentIndexChanged.connect(self._on_payment_method_changed)
+        checkout_layout.addWidget(self.combo_payment)
+
+        # Campos Dinámicos de Pago
+        self.grid_pay = QGridLayout()
+        self.grid_pay.setSpacing(10)
+
+        # 1. Campo Efectivo Recibido
+        self.lbl_cash = QLabel("Efectivo Recibido ($):")
+        self.lbl_cash.setStyleSheet("font-size: 12px; font-weight: 600; color: #cbd5e1;")
         self.input_cash = QLineEdit()
         self.input_cash.setPlaceholderText("Ej: 50000")
-        self.input_cash.setStyleSheet("font-size: 16px; font-weight: bold; color: #f8fafc;")
         self.input_cash.textChanged.connect(self.calculate_change)
 
-        lbl_change_title = QLabel("Cambio / Vuelto:")
-        lbl_change_title.setStyleSheet("font-size: 13px; font-weight: 600; color: #cbd5e1;")
-        
+        # 2. Campo Cambio / Vuelto
+        self.lbl_change_title = QLabel("Cambio / Vuelto:")
+        self.lbl_change_title.setStyleSheet("font-size: 12px; font-weight: 600; color: #cbd5e1;")
         self.lbl_change = QLabel("$ 0")
-        self.lbl_change.setStyleSheet("font-size: 20px; font-weight: 800; color: #38bdf8;")
+        self.lbl_change.setStyleSheet("font-size: 18px; font-weight: 800; color: #38bdf8;")
 
-        grid_pay.addWidget(lbl_received, 0, 0)
-        grid_pay.addWidget(self.input_cash, 0, 1)
-        grid_pay.addWidget(lbl_change_title, 1, 0)
-        grid_pay.addWidget(self.lbl_change, 1, 1)
-        checkout_layout.addLayout(grid_pay)
+        # 3. Campo Referencia (Nequi / Voucher)
+        self.lbl_ref = QLabel("Comprobante / Aprobación:")
+        self.lbl_ref.setStyleSheet("font-size: 12px; font-weight: 600; color: #cbd5e1;")
+        self.input_ref = QLineEdit()
+        self.input_ref.setPlaceholderText("Ej: M192839")
+
+        # 4. Campo Cliente (Para Fiados)
+        self.lbl_customer = QLabel("Nombre del Cliente:")
+        self.lbl_customer.setStyleSheet("font-size: 12px; font-weight: 600; color: #cbd5e1;")
+        self.input_customer = QLineEdit()
+        self.input_customer.setPlaceholderText("Ej: Don Carlos (Maestro de Obra)")
+
+        # 5. Campo Monto Electrónico (Para Pago Mixto)
+        self.lbl_mixed_electronic = QLabel("Monto Transferencia ($):")
+        self.lbl_mixed_electronic.setStyleSheet("font-size: 12px; font-weight: 600; color: #cbd5e1;")
+        self.input_mixed_electronic = QLineEdit()
+        self.input_mixed_electronic.setPlaceholderText("Ej: 20000")
+
+        self.grid_pay.addWidget(self.lbl_cash, 0, 0)
+        self.grid_pay.addWidget(self.input_cash, 0, 1)
+        self.grid_pay.addWidget(self.lbl_change_title, 1, 0)
+        self.grid_pay.addWidget(self.lbl_change, 1, 1)
+        self.grid_pay.addWidget(self.lbl_ref, 2, 0)
+        self.grid_pay.addWidget(self.input_ref, 2, 1)
+        self.grid_pay.addWidget(self.lbl_customer, 3, 0)
+        self.grid_pay.addWidget(self.input_customer, 3, 1)
+        self.grid_pay.addWidget(self.lbl_mixed_electronic, 4, 0)
+        self.grid_pay.addWidget(self.input_mixed_electronic, 4, 1)
+
+        checkout_layout.addLayout(self.grid_pay)
+        self._on_payment_method_changed(0)  # Iniciar con efectivo visible
 
         checkout_layout.addStretch()
 
@@ -194,12 +240,47 @@ class POSView(QWidget):
 
         main_layout.addWidget(checkout_panel, stretch=1)
 
+    def _on_payment_method_changed(self, index: int) -> None:
+        """Muestra u oculta los campos según el método de pago seleccionado."""
+        method = self.combo_payment.currentData()
+
+        # Ocultar todos por defecto
+        self.lbl_cash.setVisible(False)
+        self.input_cash.setVisible(False)
+        self.lbl_change_title.setVisible(False)
+        self.lbl_change.setVisible(False)
+        self.lbl_ref.setVisible(False)
+        self.input_ref.setVisible(False)
+        self.lbl_customer.setVisible(False)
+        self.input_customer.setVisible(False)
+        self.lbl_mixed_electronic.setVisible(False)
+        self.input_mixed_electronic.setVisible(False)
+
+        if method == PaymentMethod.CASH:
+            self.lbl_cash.setVisible(True)
+            self.input_cash.setVisible(True)
+            self.lbl_change_title.setVisible(True)
+            self.lbl_change.setVisible(True)
+        elif method in (PaymentMethod.NEQUI_DAVIPLATA, PaymentMethod.CARD):
+            self.lbl_ref.setVisible(True)
+            self.input_ref.setVisible(True)
+            self.lbl_ref.setText("N° Comprobante / Aprobación:")
+        elif method == PaymentMethod.CREDIT:
+            self.lbl_customer.setVisible(True)
+            self.input_customer.setVisible(True)
+        elif method == PaymentMethod.MIXED:
+            self.lbl_cash.setVisible(True)
+            self.input_cash.setVisible(True)
+            self.lbl_cash.setText("Monto en Efectivo ($):")
+            self.lbl_mixed_electronic.setVisible(True)
+            self.input_mixed_electronic.setVisible(True)
+
     def add_product_to_cart(self) -> None:
         query = self.input_search.text().strip()
         if not query:
             return
 
-        qty = int(self.spin_qty.value())  # Cantidad entera
+        qty = int(self.spin_qty.value())
         product = SaleService.get_product_by_identifier(query)
 
         if not product:
@@ -246,7 +327,6 @@ class POSView(QWidget):
             self.table_cart.setItem(row, 0, QTableWidgetItem(f" {item.sku} "))
             self.table_cart.setItem(row, 1, QTableWidgetItem(f" {item.name}"))
             
-            # Cantidad Entera
             qty_item = QTableWidgetItem(f"{int(item.quantity)} ")
             qty_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             self.table_cart.setItem(row, 2, qty_item)
@@ -275,10 +355,10 @@ class POSView(QWidget):
             change = cash - total
             if change >= 0 and total > 0:
                 self.lbl_change.setText(f"${change:,.0f}".replace(",", "."))
-                self.lbl_change.setStyleSheet("font-size: 20px; font-weight: 800; color: #10b981;")
+                self.lbl_change.setStyleSheet("font-size: 18px; font-weight: 800; color: #10b981;")
             else:
                 self.lbl_change.setText("$ 0")
-                self.lbl_change.setStyleSheet("font-size: 20px; font-weight: 800; color: #ef4444;")
+                self.lbl_change.setStyleSheet("font-size: 18px; font-weight: 800; color: #ef4444;")
         except ValueError:
             self.lbl_change.setText("$ 0")
 
@@ -288,27 +368,69 @@ class POSView(QWidget):
             return
 
         total = sum(i.subtotal for i in self.cart)
-        cash_text = self.input_cash.text().strip().replace(".", "").replace(",", "")
-        cash = float(cash_text) if cash_text else 0.0
+        selected_method = self.combo_payment.currentData()
 
-        if cash < total:
-            QMessageBox.warning(self, "Pago Insuficiente", "El dinero recibido es menor al total a cobrar.")
-            return
+        # Construir y validar el objeto de pago según el método
+        cash_val = 0.0
+        electronic_val = 0.0
+        ref_val = None
+        customer_val = None
+
+        if selected_method == PaymentMethod.CASH:
+            cash_text = self.input_cash.text().strip().replace(".", "").replace(",", "")
+            cash_val = float(cash_text) if cash_text else 0.0
+            if cash_val < total:
+                QMessageBox.warning(self, "Pago Insuficiente", "El dinero recibido es menor al total a cobrar.")
+                return
+
+        elif selected_method in (PaymentMethod.NEQUI_DAVIPLATA, PaymentMethod.CARD):
+            electronic_val = total
+            ref_val = self.input_ref.text().strip()
+            if not ref_val:
+                QMessageBox.warning(self, "Comprobante Obligatorio", "Debe ingresar el número de comprobante o aprobación de la transferencia.")
+                return
+
+        elif selected_method == PaymentMethod.CREDIT:
+            customer_val = self.input_customer.text().strip()
+            if not customer_val:
+                QMessageBox.warning(self, "Cliente Obligatorio", "Debe ingresar el nombre del cliente al que se le autoriza el fiado.")
+                return
+
+        elif selected_method == PaymentMethod.MIXED:
+            cash_text = self.input_cash.text().strip().replace(".", "").replace(",", "")
+            elec_text = self.input_mixed_electronic.text().strip().replace(".", "").replace(",", "")
+            cash_val = float(cash_text) if cash_text else 0.0
+            electronic_val = float(elec_text) if elec_text else 0.0
+            if (cash_val + electronic_val) < total:
+                QMessageBox.warning(self, "Monto Incompleto", f"La suma de efectivo + transferencia (${cash_val + electronic_val:,.0f}) es menor al total (${total:,.0f}).")
+                return
+
+        payment_dto = PaymentInfoDTO(
+            method=selected_method,
+            cash_amount=cash_val,
+            electronic_amount=electronic_val,
+            reference_number=ref_val,
+            customer_name=customer_val
+        )
 
         items_for_receipt = list(self.cart)
 
-        ok, msg, sale = SaleService.process_sale(self.cart)
+        ok, msg, sale = SaleService.process_sale(self.cart, payment_dto)
         if ok and sale:
             receipt_modal = ReceiptModal(
                 invoice_number=sale.invoice_number,
                 items=items_for_receipt,
-                cash_received=cash,
+                payment=payment_dto,
                 parent=self
             )
             receipt_modal.exec()
 
+            # Limpiar campos
             self.cart.clear()
             self.input_cash.clear()
+            self.input_ref.clear()
+            self.input_customer.clear()
+            self.input_mixed_electronic.clear()
             self._refresh_cart_table()
 
             if self.on_sale_completed_callback:

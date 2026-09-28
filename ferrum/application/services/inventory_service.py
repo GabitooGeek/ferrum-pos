@@ -1,7 +1,7 @@
 """
 ferrum.application.services.inventory_service
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-Servicio para gestión de catálogo de productos y generación de códigos de barras.
+Servicio para gestión de catálogo, reabastecimiento de stock y generación de códigos de barras.
 """
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,7 +28,7 @@ class NewProductDTO:
 
 
 class InventoryService:
-    """Administra altas, modificaciones y generación de etiquetas."""
+    """Administra altas, modificaciones y reabastecimiento de inventario."""
 
     @staticmethod
     def _ensure_barcode_dir() -> Path:
@@ -38,15 +38,11 @@ class InventoryService:
 
     @classmethod
     def generate_barcode_image(cls, code_data: str) -> Path:
-        """Genera una imagen PNG del código de barras Code128."""
         b_dir = cls._ensure_barcode_dir()
         file_path = b_dir / f"{code_data}"
-        
-        # Usar estándar Code128 (alfanumérico de alta densidad)
         code_class = barcode.get_barcode_class("code128")
         writer = ImageWriter()
-        writer.font_path = None  # Usa fuente integrada por defecto
-        
+        writer.font_path = None
         code_instance = code_class(code_data, writer=writer)
         saved_path = code_instance.save(str(file_path), options={"write_text": True})
         logger.debug(f"Código de barras generado en: {saved_path}")
@@ -54,7 +50,6 @@ class InventoryService:
 
     @classmethod
     def create_product(cls, dto: NewProductDTO) -> Tuple[bool, str, Optional[Product]]:
-        """Crea y persiste un nuevo producto en la base de datos."""
         sku_clean = dto.sku.strip().upper()
         if not sku_clean:
             return False, "El SKU no puede estar vacío.", None
@@ -69,7 +64,6 @@ class InventoryService:
 
         for session in db.get_session():
             try:
-                # Validar duplicados de SKU
                 existing = session.query(Product).filter(
                     (Product.sku == sku_clean) | (Product.barcode == barcode_val)
                 ).first()
@@ -90,9 +84,7 @@ class InventoryService:
                 session.add(product)
                 session.commit()
 
-                # Generar imagen de código de barras
                 cls.generate_barcode_image(barcode_val)
-
                 logger.info(f"Producto '{product.name}' ({product.sku}) registrado exitosamente.")
                 return True, f"Producto '{product.name}' agregado correctamente.", product
 
@@ -102,3 +94,41 @@ class InventoryService:
                 return False, f"Error en base de datos: {str(exc)}", None
 
         return False, "No se pudo conectar a la base de datos.", None
+
+    @classmethod
+    def replenish_stock(
+        cls,
+        product_id: int,
+        quantity_to_add: float,
+        new_cost_price: Optional[float] = None,
+        new_sale_price: Optional[float] = None
+    ) -> Tuple[bool, str]:
+        """Suma unidades de mercancía entrante y actualiza precios si es necesario."""
+        if quantity_to_add <= 0:
+            return False, "La cantidad a reabastecer debe ser mayor a 0."
+
+        for session in db.get_session():
+            try:
+                prod = session.query(Product).filter(Product.id == product_id).first()
+                if not prod:
+                    return False, "El producto seleccionado no existe."
+
+                # Sumar nuevo stock
+                prod.stock = float(prod.stock) + float(quantity_to_add)
+
+                # Actualizar precios si se modificaron
+                if new_cost_price is not None and new_cost_price > 0:
+                    prod.cost_price = new_cost_price
+                if new_sale_price is not None and new_sale_price > 0:
+                    prod.sale_price = new_sale_price
+
+                session.commit()
+                logger.info(f"Reabastecido producto '{prod.name}' (+{int(quantity_to_add)}). Nuevo stock: {int(prod.stock)}")
+                return True, f"Stock actualizado con éxito. Nuevo total: {int(prod.stock)} unidades."
+
+            except Exception as exc:
+                session.rollback()
+                logger.error(f"Error al reabastecer stock: {exc}")
+                return False, f"Error de base de datos: {str(exc)}"
+
+        return False, "No se pudo conectar a la base de datos."

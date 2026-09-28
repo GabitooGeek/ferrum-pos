@@ -1,7 +1,7 @@
 """
 ferrum.presentation.components.receipt_modal
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-Modal de vista previa e impresión de ticket térmico ESC/POS.
+Modal de ticket térmico blindado contra tipos Enum/str.
 """
 from pathlib import Path
 from typing import List
@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from ferrum.application.services.receipt_service import ReceiptService, StoreInfo
-from ferrum.application.services.sale_service import CartItemDTO
+from ferrum.application.services.sale_service import CartItemDTO, PaymentInfoDTO
 from ferrum.infrastructure.hardware.printer.network_adapter import NetworkPrinterAdapter
 
 
@@ -30,17 +30,17 @@ class ReceiptModal(QDialog):
         self,
         invoice_number: str,
         items: List[CartItemDTO],
-        cash_received: float,
+        payment: PaymentInfoDTO,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.invoice_number = invoice_number
         self.items = items
-        self.cash_received = cash_received
-        self.ticket_text = ReceiptService.build_ticket_text(invoice_number, items, cash_received)
+        self.payment = payment
+        self.ticket_text = ReceiptService.build_ticket_text(invoice_number, items, payment)
 
         self.setWindowTitle(f"Ticket de Venta — {invoice_number}")
-        self.resize(460, 620)
+        self.resize(470, 640)
         self.setModal(True)
         self._setup_ui()
 
@@ -67,8 +67,7 @@ class ReceiptModal(QDialog):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(14)
 
-        # Header del modal
-        title = QLabel("📄 VISTA PREVIA DEL TICKET (80mm)")
+        title = QLabel("📄 COMPROBANTE DE PAGO (80mm)")
         title.setStyleSheet("font-size: 14px; font-weight: 800; color: #38bdf8;")
         layout.addWidget(title)
 
@@ -91,7 +90,7 @@ class ReceiptModal(QDialog):
         self.txt_preview.setText(self.ticket_text)
         layout.addWidget(self.txt_preview, stretch=1)
 
-        # Configuración rápida de IP de Impresora
+        # Configuración de IP
         printer_bar = QFrame()
         printer_bar.setStyleSheet("background-color: #131d31; border-radius: 6px; padding: 8px; border: 1px solid #1e293b;")
         p_layout = QHBoxLayout(printer_bar)
@@ -104,7 +103,7 @@ class ReceiptModal(QDialog):
         p_layout.addWidget(self.input_printer_ip)
         layout.addWidget(printer_bar)
 
-        # Botones de Acción
+        # Botones
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(10)
 
@@ -166,10 +165,10 @@ class ReceiptModal(QDialog):
             ]
             hal_items = ReceiptService.to_hal_receipt_items(self.items)
             total = sum(i.subtotal for i in self.items)
+            method_str = self.payment.method.value if hasattr(self.payment.method, "value") else str(self.payment.method)
             totals = {
                 "Total COP": total,
-                "Efectivo": self.cash_received,
-                "Cambio": max(0.0, self.cash_received - total)
+                "Forma Pago": method_str,
             }
             try:
                 adapter.print_ticket(
@@ -185,5 +184,5 @@ class ReceiptModal(QDialog):
             QMessageBox.warning(
                 self,
                 "Impresora No Encontrada",
-                f"No se pudo conectar a la impresora térmica en {ip}:9100.\n(Verifique que la impresora esté encendida y en la misma red local)."
+                f"No se pudo conectar a la impresora en {ip}:9100.\n(Verifique que la impresora esté encendida)."
             )
