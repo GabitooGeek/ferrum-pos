@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ferrum-pos"
+version = "0.1.0"
+description = "Industrial POS and Surveillance System for Hardware Stores"
+authors = [{ name = "Ferrum Core Team", email = "dev@ferrum.local" }]
+requires-python = ">=3.11"
+dependencies = [
+    "PySide6>=6.6.2",
+    "SQLAlchemy>=2.0.28",
+    "psycopg2-binary>=2.9.9",
+    "alembic>=1.13.1",
+    "opencv-python-headless>=4.9.0.80",
+    "platformdirs>=4.2.0",
+    "pydantic>=2.6.4",
+    "python-barcode>=0.15.1",
+    "Pillow>=10.2.0",
+    "pyserial>=3.5",
+    "pyusb>=1.2.1",
+    "loguru>=0.7.2",
+    "pywin32>=306; sys_platform == 'win32'",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ferrum*"]

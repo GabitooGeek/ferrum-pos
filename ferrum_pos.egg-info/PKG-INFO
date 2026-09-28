@@ -1,0 +1,19 @@
+Metadata-Version: 2.4
+Name: ferrum-pos
+Version: 0.1.0
+Summary: Industrial POS and Surveillance System for Hardware Stores
+Author-email: Ferrum Core Team <dev@ferrum.local>
+Requires-Python: >=3.11
+Requires-Dist: PySide6>=6.6.2
+Requires-Dist: SQLAlchemy>=2.0.28
+Requires-Dist: psycopg2-binary>=2.9.9
+Requires-Dist: alembic>=1.13.1
+Requires-Dist: opencv-python-headless>=4.9.0.80
+Requires-Dist: platformdirs>=4.2.0
+Requires-Dist: pydantic>=2.6.4
+Requires-Dist: python-barcode>=0.15.1
+Requires-Dist: Pillow>=10.2.0
+Requires-Dist: pyserial>=3.5
+Requires-Dist: pyusb>=1.2.1
+Requires-Dist: loguru>=0.7.2
+Requires-Dist: pywin32>=306; sys_platform == "win32"
