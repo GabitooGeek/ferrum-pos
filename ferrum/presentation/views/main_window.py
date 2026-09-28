@@ -1,10 +1,10 @@
 """
 ferrum.presentation.views.main_window
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-Ventana principal del sistema POS industrial con telemetría e inventario.
+Vista moderna e industrial para FERRUM POS.
 """
+from pathlib import Path
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -14,7 +14,6 @@ from PySide6.QtWidgets import (
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
-    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -24,120 +23,205 @@ from ferrum.infrastructure.database.connection import db
 from ferrum.infrastructure.database.models import Product
 
 
+class KPICard(QFrame):
+    """Tarjeta de resumen de métricas."""
+    def __init__(self, title: str, value: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setProperty("class", "kpi_card")
+        layout = QVBoxLayout(self)
+        layout.setSpacing(4)
+        layout.setContentsMargins(16, 12, 16, 12)
+
+        lbl_title = QLabel(title)
+        lbl_title.setProperty("class", "kpi_title")
+        self.lbl_value = QLabel(value)
+        self.lbl_value.setProperty("class", "kpi_value")
+
+        layout.addWidget(lbl_title)
+        layout.addWidget(self.lbl_value)
+
+
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("FERRUM POS | Industrial Point of Sale")
-        self.resize(1000, 650)
-        self.setStyleSheet("""
-            QMainWindow {
-                background-color: #121214;
-            }
-            QLabel {
-                color: #e1e1e6;
-                font-family: 'Segoe UI', system-ui, sans-serif;
-            }
-            QTableWidget {
-                background-color: #1a1a1e;
-                color: #e1e1e6;
-                border: 1px solid #29292e;
-                gridline-color: #29292e;
-                border-radius: 6px;
-                font-size: 13px;
-            }
-            QHeaderView::section {
-                background-color: #202024;
-                color: #04d361;
-                padding: 6px;
-                font-weight: bold;
-                border: 1px solid #29292e;
-            }
-            QTextEdit {
-                background-color: #1a1a1e;
-                color: #00e676;
-                border: 1px solid #29292e;
-                border-radius: 6px;
-                font-family: monospace;
-                font-size: 11px;
-            }
-        """)
+        self.setWindowTitle("FERRUM POS — Control Industrial")
+        self.resize(1150, 700)
+        self.setMinimumSize(950, 600)
 
-        # Contenedor central
-        central_widget = QWidget(self)
-        self.setCentralWidget(central_widget)
-        main_layout = QVBoxLayout(central_widget)
-        main_layout.setContentsMargins(20, 20, 20, 20)
-        main_layout.setSpacing(15)
+        # Cargar estilos QSS externos
+        self._load_stylesheet()
 
-        # Header Superior
+        # Layout Raíz (Horizontal: Sidebar + Contenido)
+        root_widget = QWidget(self)
+        self.setCentralWidget(root_widget)
+        root_layout = QHBoxLayout(root_widget)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
+
+        # 1. Sidebar de navegación
+        sidebar = self._build_sidebar()
+        root_layout.addWidget(sidebar)
+
+        # 2. Área principal de contenido
+        content_wrapper = QWidget()
+        content_layout = QVBoxLayout(content_wrapper)
+        content_layout.setContentsMargins(28, 24, 28, 0)
+        content_layout.setSpacing(20)
+
+        # Header de sección
         header_layout = QHBoxLayout()
-        title = QLabel("🔩 FERRUM POS - ESTACIÓN DE VENTA E INVENTARIO")
-        title.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
-        header_layout.addWidget(title)
+        view_title = QLabel("Inventario General")
+        view_title.setStyleSheet("font-size: 20px; font-weight: 700; color: #f8fafc;")
+        header_layout.addWidget(view_title)
         header_layout.addStretch()
 
-        self.btn_refresh = QPushButton("🔄 Recargar Inventario")
-        self.btn_refresh.setStyleSheet("""
-            QPushButton {
-                background-color: #0066cc;
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #0052a3;
-            }
-        """)
+        self.btn_refresh = QPushButton("Recargar Datos")
+        self.btn_refresh.setObjectName("btn_primary")
         self.btn_refresh.clicked.connect(self.load_inventory_data)
         header_layout.addWidget(self.btn_refresh)
-        main_layout.addLayout(header_layout)
+        content_layout.addLayout(header_layout)
+
+        # Tarjetas resumen (KPIs)
+        self.kpi_layout = QHBoxLayout()
+        self.kpi_layout.setSpacing(16)
+        self.card_total_items = KPICard("Total de Productos", "0")
+        self.card_stock_value = KPICard("Valor de Inventario", "$0.00")
+        self.card_system_mode = KPICard("Modo de Operación", "OFFLINE (SQLite)")
+        self.kpi_layout.addWidget(self.card_total_items)
+        self.kpi_layout.addWidget(self.card_stock_value)
+        self.kpi_layout.addWidget(self.card_system_mode)
+        content_layout.addLayout(self.kpi_layout)
 
         # Tabla de productos
         self.table = QTableWidget()
         self.table.setColumnCount(6)
         self.table.setHorizontalHeaderLabels([
-            "ID", "SKU", "Descripción", "Unidad", "Precio Venta", "Stock Actual"
+            "SKU", "Descripción del Producto", "Unidad", "Costo", "Precio Venta", "Stock Disponible"
         ])
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-        main_layout.addWidget(self.table)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        content_layout.addWidget(self.table)
 
-        # Telemetría inferior
-        info_label = QLabel("Diagnóstico de Plataforma y Hardware:")
-        info_label.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
-        main_layout.addWidget(info_label)
+        # Barra de estado inferior discreta
+        status_bar = self._build_status_bar()
+        content_layout.addWidget(status_bar)
 
-        self.telemetry_box = QTextEdit()
-        self.telemetry_box.setReadOnly(True)
-        self.telemetry_box.setMaximumHeight(120)
-        main_layout.addWidget(self.telemetry_box)
+        root_layout.addWidget(content_wrapper, stretch=1)
 
-        # Cargar datos iniciales
-        self.load_telemetry()
+        # Cargar datos desde SQLite
         self.load_inventory_data()
 
-    def load_telemetry(self) -> None:
-        """Muestra los datos de entorno en el widget."""
-        info = [
-            f"[SISTEMA OPERATIVO]: {settings.os_type.upper()} (Arch Linux validado)",
-            f"[BASE DE DATOS]    : {settings.paths.sqlite_db_path.as_posix()}",
-            f"[LOGS]             : {settings.paths.log_dir.as_posix()}",
-            "[HARDWARE STATUS]  : Adaptador ESC/POS Network cargado.",
-            "[CERBERUS CCTV]    : Standby (Listo para conectar stream RTSP)",
-        ]
-        self.telemetry_box.setText("\n".join(info))
+    def _load_stylesheet(self) -> None:
+        qss_path = Path(__file__).resolve().parent.parent / "assets" / "style.qss"
+        if qss_path.exists():
+            with open(qss_path, "r", encoding="utf-8") as f:
+                self.setStyleSheet(f.read())
+
+    def _build_sidebar(self) -> QFrame:
+        sidebar = QFrame()
+        sidebar.setObjectName("sidebar")
+        sidebar.setFixedWidth(220)
+        layout = QVBoxLayout(sidebar)
+        layout.setContentsMargins(16, 24, 16, 24)
+        layout.setSpacing(8)
+
+        # Logo / Marca
+        brand_icon = QLabel("FERRUM")
+        brand_icon.setObjectName("brand_title")
+        brand_sub = QLabel("Industrial POS & CCTV")
+        brand_sub.setObjectName("brand_subtitle")
+        layout.addWidget(brand_icon)
+        layout.addWidget(brand_sub)
+        layout.addSpacing(24)
+
+        # Botones de secciones
+        btn_pos = QPushButton("🛒  Punto de Venta")
+        btn_pos.setProperty("class", "nav_button")
+        
+        btn_inv = QPushButton("📦  Inventario")
+        btn_inv.setProperty("class", "nav_button")
+        btn_inv.setChecked(True)  # Activo por defecto
+
+        btn_cctv = QPushButton("📹  Cerberus CCTV")
+        btn_cctv.setProperty("class", "nav_button")
+
+        btn_cfg = QPushButton("⚙️  Configuración")
+        btn_cfg.setProperty("class", "nav_button")
+
+        for b in [btn_pos, btn_inv, btn_cctv, btn_cfg]:
+            layout.addWidget(b)
+
+        layout.addStretch()
+
+        # Versión en el pie del sidebar
+        ver_lbl = QLabel("v0.1.0-alpha")
+        ver_lbl.setStyleSheet("color: #475569; font-size: 11px;")
+        layout.addWidget(ver_lbl)
+
+        return sidebar
+
+    def _build_status_bar(self) -> QFrame:
+        bar = QFrame()
+        bar.setObjectName("status_bar")
+        layout = QHBoxLayout(bar)
+        layout.setContentsMargins(4, 6, 4, 6)
+
+        status_left = QLabel(f"● SISTEMA ACTIVO: Arch Linux ({settings.os_type})")
+        status_left.setProperty("class", "status_text")
+        status_left.setStyleSheet("color: #10b981; font-weight: bold;")
+
+        status_right = QLabel(f"DB: {settings.paths.sqlite_db_path.name}")
+        status_right.setProperty("class", "status_text")
+
+        layout.addWidget(status_left)
+        layout.addStretch()
+        layout.addWidget(status_right)
+        return bar
 
     def load_inventory_data(self) -> None:
-        """Consulta la base de datos y llena la tabla."""
+        """Carga y recalcula métricas."""
         self.table.setRowCount(0)
+        total_items = 0
+        total_value = 0.0
+
         for session in db.get_session():
             products = session.query(Product).all()
-            for row_idx, p in enumerate(products):
-                self.table.insertRow(row_idx)
-                self.table.setItem(row_idx, 0, QTableWidgetItem(str(p.id)))
-                self.table.setItem(row_idx, 1, QTableWidgetItem(p.sku))
-                self.table.setItem(row_idx, 2, QTableWidgetItem(p.name))
-                self.table.setItem(row_idx, 3, QTableWidgetItem(p.unit.value))
-                self.table.setItem(row_idx, 4, QTableWidgetItem(f"${p.sale_price:.2f}"))
-                self.table.setItem(row_idx, 5, QTableWidgetItem(f"{p.stock:.3f}"))
+            total_items = len(products)
+
+            for row, p in enumerate(products):
+                self.table.insertRow(row)
+                total_value += float(p.stock) * float(p.sale_price)
+
+                # Celda SKU
+                item_sku = QTableWidgetItem(p.sku)
+                item_sku.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.table.setItem(row, 0, item_sku)
+
+                # Descripción
+                self.table.setItem(row, 1, QTableWidgetItem(p.name))
+
+                # Unidad
+                item_unit = QTableWidgetItem(f"  {p.unit.value}  ")
+                item_unit.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.table.setItem(row, 2, item_unit)
+
+                # Costo
+                item_cost = QTableWidgetItem(f"${p.cost_price:.2f}")
+                item_cost.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                self.table.setItem(row, 3, item_cost)
+
+                # Venta
+                item_price = QTableWidgetItem(f"${p.sale_price:.2f}")
+                item_price.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                self.table.setItem(row, 4, item_price)
+
+                # Stock
+                item_stock = QTableWidgetItem(f"{p.stock:.3f}")
+                item_stock.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                self.table.setItem(row, 5, item_stock)
+
+        # Actualizar Tarjetas KPI
+        self.card_total_items.lbl_value.setText(str(total_items))
+        self.card_stock_value.lbl_value.setText(f"${total_value:,.2f}")
