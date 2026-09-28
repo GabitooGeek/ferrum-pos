@@ -1,0 +1,67 @@
+Como Arquitecto de Software, analizando una ferretería real en Colombia operando
+en producción, aquí tienes el diagnóstico de lo que falta para tener un
+sistema 100% comercial e industrial:
+
+1. Métodos de Pago Colombianos (Crítico para Caja)
+
+Actualmente el POS solo calcula efectivo. En Colombia hoy en día es obligatorio
+soportar:
+
+  - Nequi / Daviplata (con campo para escribir el número de
+    aprobación/comprobante).
+  - Datáfono / Tarjeta de Débito-Crédito.
+  - Pagos Mixtos (ej: cliente paga $ 30.000 en efectivo y $ 20.000 por Nequi).
+  - "El Fiado" (Crédito a Clientes Habituales): Maestros de obra o clientes
+    frecuentes que llevan material y pagan los sábados.
+
+2. Integración de Balanza Digital (Hardware HAL)
+
+En ferreterías, los clavos, alambre, tornillería menuda y solventes se venden
+por peso.
+
+  - Conectar la Balanza Digital vía puerto serial (RS232 o USB) para que al
+    poner los clavos sobre la báscula, el peso se cargue automáticamente en la
+    pantalla de cobro sin tener que digitarlo a mano.
+
+3. Apertura Automática del Cajón Monedero (RJ11)
+
+  - Al presionar "PROCESAR VENTA", la impresora térmica debe enviar el pulso
+    eléctrico al cajón metálico para que se abra automáticamente solo cuando hay
+    cobro en efectivo.
+
+4. Auditoría Cerberus CCTV vinculada a la Venta (Antifraude)
+
+  - En el momento exacto en que el cajero presiona "Cobrar", Cerberus puede
+    tomar una fotografía de alta resolución o un clip de video de 5 segundos del
+    mostrador y guardarlo vinculado al número de factura (VNT-...).
+  - Si un cliente reclama que le dieron mal el cambio o que faltó material, el
+    administrador puede ver la foto/video de esa venta exacta.
+
+5. Edición de Productos y Entradas de Mercancía (Compras)
+
+Actualmente solo tenemos "Crear Producto", pero hace falta:
+
+  - Editar precios y nombres de productos existentes.
+  - Entrada de mercancía / Reabastecimiento: Cuando llega el camión con 50
+    bultos de cemento o 200 metros de cable, sumar al stock existente sin tener
+    que crear el producto de nuevo.
+  - Importación masiva desde Excel / CSV: Para cargar catálogos de 2.000 a 5.000
+    artículos de una sola vez.
+
+6. Control de Usuarios y Roles (Seguridad)
+
+  - Cajero: Solo puede vender, consultar precios y ver su propio turno.
+  - Administrador: Puede ver márgenes de ganancia, costos reales, modificar
+    inventario y hacer el cierre general del día.
+
+Resumen de Prioridad Recomendada:
+
+| Prioridad | Módulo                                     | Impacto                                  |
+| :-------- | :----------------------------------------- | :--------------------------------------- |
+| **Alta**  | Métodos de Pago (Nequi, Tarjeta, Mixto)    | Esencial para cobrar en Colombia         |
+| **Alta**  | Entradas de Stock y Edición de Productos   | Vital para mantener el inventario al día |
+| **Media** | Apertura de Cajón Monedero + Balanza RS232 | Automatización de hardware físico        |
+| **Media** | Cerberus Snapshot (Foto al cobrar)         | Seguridad y auditoría antifraude         |
+| **Baja**  | Roles (Cajero vs Admin con Login)          | Control de personal                      |
+
+¿Cuál de estos te gustaría que implementemos a continuación?

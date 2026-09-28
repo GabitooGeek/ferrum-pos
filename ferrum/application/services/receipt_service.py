@@ -1,7 +1,7 @@
 """
 ferrum.application.services.receipt_service
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-Generador y formateador de tickets de compra térmicos para Colombia.
+Generador de tickets térmicos con cantidades enteras para Colombia.
 """
 from dataclasses import dataclass
 from datetime import datetime
@@ -21,8 +21,6 @@ class StoreInfo:
 
 
 class ReceiptService:
-    """Construye y formatea el recibo de compra para pantalla e impresora térmica."""
-
     @classmethod
     def build_ticket_text(
         cls,
@@ -35,7 +33,6 @@ class ReceiptService:
         change = max(0.0, cash_received - total)
         now_str = datetime.now().strftime("%d/%m/%Y %I:%M %p")
 
-        # 42 caracteres de ancho (Estándar papel térmico 80mm)
         width = 42
         lines = []
 
@@ -47,27 +44,26 @@ class ReceiptService:
         lines.append(store.phone.center(width))
         lines.append("=" * width)
 
-        # Metadatos de la venta
+        # Datos Venta
         lines.append(f"Factura N°: {invoice_number}")
         lines.append(f"Fecha/Hora: {now_str}")
         lines.append(f"Cajero    : Estación 01 (Caja Principal)")
         lines.append("-" * width)
 
-        # Columnas de Ítems
-        lines.append(f"{'CANT':<7} {'DESCRIPCIÓN':<18} {'VR.UNIT':>7} {'TOTAL':>8}")
+        # Columnas
+        lines.append(f"{'CANT':<6} {'DESCRIPCIÓN':<19} {'VR.UNIT':>7} {'TOTAL':>8}")
         lines.append("-" * width)
 
         for item in items:
-            # Línea de descripción
             desc = item.name[:width]
             lines.append(desc)
             
-            # Cantidad con unidad, valor unitario y subtotal COP
-            qty_unit = f"{item.quantity:.2f} {item.unit[:3]}"
+            # Cantidad en Entero (ej: 2 UND, 5 MET)
+            qty_unit = f"{int(item.quantity)} {item.unit[:3]}"
             p_unit = f"${item.unit_price:,.0f}".replace(",", ".")
             p_sub = f"${item.subtotal:,.0f}".replace(",", ".")
             
-            lines.append(f"  {qty_unit:<12} {p_unit:>11} {p_sub:>13}")
+            lines.append(f"  {qty_unit:<10} {p_unit:>12} {p_sub:>14}")
 
         lines.append("-" * width)
 
@@ -77,7 +73,6 @@ class ReceiptService:
         lines.append(f"{'Cambio / Vuelto:':<25} {f'${change:,.0f}'.replace(',', '.'):>16}")
         lines.append("=" * width)
 
-        # Pie de página
         lines.append("¡Gracias por su compra!".center(width))
         lines.append("Garantía de 30 días con este ticket".center(width))
         lines.append("Software: FERRUM POS (Linux Industrial)".center(width))
@@ -86,14 +81,13 @@ class ReceiptService:
 
     @classmethod
     def to_hal_receipt_items(cls, items: List[CartItemDTO]) -> List[ReceiptItem]:
-        """Convierte los ítems del carrito al formato esperado por la HAL de impresión."""
         hal_items = []
         for i in items:
             hal_items.append(
                 ReceiptItem(
                     sku=i.sku,
                     description=i.name,
-                    quantity=i.quantity,
+                    quantity=float(int(i.quantity)),
                     unit_price=i.unit_price,
                     total=i.subtotal
                 )

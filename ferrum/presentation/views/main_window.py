@@ -1,7 +1,7 @@
 """
 ferrum.presentation.views.main_window
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-Ventana principal con Punto de Venta, Inventario, Cerberus CCTV y Cierre de Caja.
+Ventana principal con inventario en números enteros limpios.
 """
 from pathlib import Path
 from PySide6.QtCore import Qt
@@ -61,7 +61,6 @@ class MainWindow(QMainWindow):
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
 
-        # 1. Contenedor de Vistas
         self.stack = QStackedWidget()
         self.view_pos = POSView(on_sale_completed_callback=self._on_sale_completed)
         self.view_inventory = self._build_inventory_view()
@@ -73,11 +72,9 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.view_reports)    # 2
         self.stack.addWidget(self.view_cctv)       # 3
 
-        # 2. Sidebar
         sidebar = self._build_sidebar()
         root_layout.addWidget(sidebar)
 
-        # 3. Contenedor Central
         content_container = QWidget()
         content_layout = QVBoxLayout(content_container)
         content_layout.setContentsMargins(28, 20, 28, 0)
@@ -106,7 +103,6 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(16, 24, 16, 24)
         layout.setSpacing(8)
 
-        # Logo
         brand_icon = QLabel("FERRUM")
         brand_icon.setObjectName("brand_title")
         brand_sub = QLabel("Industrial POS & CCTV")
@@ -269,25 +265,31 @@ class MainWindow(QMainWindow):
                 self.table.insertRow(row)
                 total_value += float(p.stock) * float(p.sale_price)
 
+                # SKU
                 item_sku = QTableWidgetItem(f" {p.sku} ")
                 item_sku.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 self.table.setItem(row, 0, item_sku)
 
+                # Descripción
                 self.table.setItem(row, 1, QTableWidgetItem(f" {p.name}"))
 
+                # Unidad
                 item_unit = QTableWidgetItem(f" {p.unit.value} ")
                 item_unit.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 self.table.setItem(row, 2, item_unit)
 
+                # Costo COP entero
                 item_cost = QTableWidgetItem(f"${p.cost_price:,.0f} ".replace(",", "."))
                 item_cost.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                 self.table.setItem(row, 3, item_cost)
 
+                # Precio Venta COP entero
                 item_price = QTableWidgetItem(f"${p.sale_price:,.0f} ".replace(",", "."))
                 item_price.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                 self.table.setItem(row, 4, item_price)
 
-                item_stock = QTableWidgetItem(f"{p.stock:,.2f} ")
+                # Stock en Entero Limpio (ej: 148, 50, 12)
+                item_stock = QTableWidgetItem(f"{int(p.stock)} ")
                 item_stock.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                 self.table.setItem(row, 5, item_stock)
 

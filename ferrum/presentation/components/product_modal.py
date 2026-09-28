@@ -1,7 +1,7 @@
 """
 ferrum.presentation.components.product_modal
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-Modal limpio sin botones de flechas laterales en campos numéricos.
+Modal con stock y precios en números enteros estrictos.
 """
 from pathlib import Path
 from PySide6.QtCore import Qt
@@ -9,7 +9,6 @@ from PySide6.QtWidgets import (
     QAbstractSpinBox,
     QComboBox,
     QDialog,
-    QDoubleSpinBox,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -81,7 +80,7 @@ class ProductModal(QDialog):
             self.combo_unit.addItem(u.value, u)
         grid.addWidget(self.combo_unit, 3, 1)
 
-        # Costo (Sin flechas, campo limpio)
+        # Costo (Entero COP)
         lbl_cost = QLabel("Precio Costo (COP $):")
         grid.addWidget(lbl_cost, 4, 0)
         self.spin_cost = QSpinBox()
@@ -90,7 +89,7 @@ class ProductModal(QDialog):
         self.spin_cost.setValue(0)
         grid.addWidget(self.spin_cost, 4, 1)
 
-        # Venta (Sin flechas, campo limpio)
+        # Venta (Entero COP)
         lbl_price = QLabel("Precio Venta (COP $):")
         grid.addWidget(lbl_price, 5, 0)
         self.spin_price = QSpinBox()
@@ -99,14 +98,13 @@ class ProductModal(QDialog):
         self.spin_price.setValue(0)
         grid.addWidget(self.spin_price, 5, 1)
 
-        # Stock (Sin flechas)
-        lbl_stock = QLabel("Stock Inicial:")
+        # Stock Inicial (Número Entero)
+        lbl_stock = QLabel("Stock Inicial (Unidades):")
         grid.addWidget(lbl_stock, 6, 0)
-        self.spin_stock = QDoubleSpinBox()
+        self.spin_stock = QSpinBox()
         self.spin_stock.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
-        self.spin_stock.setRange(0.0, 999999.0)
-        self.spin_stock.setDecimals(2)
-        self.spin_stock.setValue(10.0)
+        self.spin_stock.setRange(0, 1000000)
+        self.spin_stock.setValue(10)
         grid.addWidget(self.spin_stock, 6, 1)
 
         layout.addLayout(grid)
@@ -162,7 +160,7 @@ class ProductModal(QDialog):
             unit=selected_unit,
             cost_price=float(self.spin_cost.value()),
             sale_price=float(self.spin_price.value()),
-            initial_stock=float(self.spin_stock.value()),
+            initial_stock=float(self.spin_stock.value()),  # Entero
             barcode_value=self.input_barcode.text() if self.input_barcode.text().strip() else None
         )
 

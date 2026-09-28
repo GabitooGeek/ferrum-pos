@@ -1,13 +1,12 @@
 """
 ferrum.presentation.views.pos_view
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-Terminal de cobro con receptor de ráfaga para pistolas láser de códigos de barra.
+Terminal de cobro con cantidades y stock en números enteros.
 """
 from typing import List
-from PySide6.QtCore import QEvent, QObject, Qt, QTimer
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractSpinBox,
-    QDoubleSpinBox,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -16,6 +15,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -31,17 +31,7 @@ class POSView(QWidget):
         super().__init__(parent)
         self.on_sale_completed_callback = on_sale_completed_callback
         self.cart: List[CartItemDTO] = []
-        
-        # Buffer para captura de ráfagas rápidas de pistola láser
-        self._scanner_buffer = ""
-        self._scanner_timer = QTimer(self)
-        self._scanner_timer.setInterval(60)  # Ventana de 60ms entre caracteres de pistola
-        self._scanner_timer.setSingleShot(True)
-        self._scanner_timer.timeout.connect(self._clear_scanner_buffer)
-
         self._setup_ui()
-        # Instalar filtro de eventos para escuchar la pistola en cualquier parte de la ventana
-        self.installEventFilter(self)
 
     def _setup_ui(self) -> None:
         main_layout = QHBoxLayout(self)
@@ -68,7 +58,7 @@ class POSView(QWidget):
         input_layout.setSpacing(10)
 
         self.input_search = QLineEdit()
-        self.input_search.setPlaceholderText("🔴 Listo para pistola láser o escribir SKU (ej. CAB-001)...")
+        self.input_search.setPlaceholderText("Escanear Código o SKU (ej. CAB-001, PUN-002)...")
         self.input_search.returnPressed.connect(self.add_product_to_cart)
         input_layout.addWidget(self.input_search, stretch=3)
 
@@ -76,11 +66,11 @@ class POSView(QWidget):
         lbl_qty.setStyleSheet("font-weight: 700; color: #94a3b8;")
         input_layout.addWidget(lbl_qty)
 
-        self.spin_qty = QDoubleSpinBox()
+        # Selector de Cantidad en Enteros (1, 2, 5, 10)
+        self.spin_qty = QSpinBox()
         self.spin_qty.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
-        self.spin_qty.setRange(0.01, 9999.0)
-        self.spin_qty.setValue(1.0)
-        self.spin_qty.setDecimals(2)
+        self.spin_qty.setRange(1, 10000)
+        self.spin_qty.setValue(1)
         self.spin_qty.setStyleSheet("color: #38bdf8; font-size: 14px; font-weight: bold;")
         input_layout.addWidget(self.spin_qty, stretch=1)
 
@@ -204,15 +194,12 @@ class POSView(QWidget):
 
         main_layout.addWidget(checkout_panel, stretch=1)
 
-    def _clear_scanner_buffer(self) -> None:
-        self._scanner_buffer = ""
-
-    def add_product_to_cart(self, code_override: str | None = None) -> None:
-        query = code_override if code_override else self.input_search.text().strip()
+    def add_product_to_cart(self) -> None:
+        query = self.input_search.text().strip()
         if not query:
             return
 
-        qty = float(self.spin_qty.value())
+        qty = int(self.spin_qty.value())  # Cantidad entera
         product = SaleService.get_product_by_identifier(query)
 
         if not product:
@@ -223,7 +210,7 @@ class POSView(QWidget):
             QMessageBox.warning(
                 self,
                 "Stock Insuficiente",
-                f"El producto '{product.name}' solo tiene {product.stock:.2f} {product.unit.value} disponibles."
+                f"El producto '{product.name}' solo tiene {int(product.stock)} {product.unit.value} disponibles."
             )
             return
 
@@ -231,14 +218,14 @@ class POSView(QWidget):
             product_id=product.id,
             sku=product.sku,
             name=product.name,
-            quantity=qty,
+            quantity=float(qty),
             unit_price=float(product.sale_price),
             unit=product.unit.value
         )
         self.cart.append(item_dto)
 
         self.input_search.clear()
-        self.spin_qty.setValue(1.0)
+        self.spin_qty.setValue(1)
         self.input_search.setFocus()
         self._refresh_cart_table()
 
@@ -259,7 +246,8 @@ class POSView(QWidget):
             self.table_cart.setItem(row, 0, QTableWidgetItem(f" {item.sku} "))
             self.table_cart.setItem(row, 1, QTableWidgetItem(f" {item.name}"))
             
-            qty_item = QTableWidgetItem(f"{item.quantity:.2f} ")
+            # Cantidad Entera
+            qty_item = QTableWidgetItem(f"{int(item.quantity)} ")
             qty_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             self.table_cart.setItem(row, 2, qty_item)
 
