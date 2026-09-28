@@ -1,17 +1,19 @@
 """
 ferrum.presentation.views.main_window
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-Vista moderna e industrial para FERRUM POS.
+Ventana principal con navegación lateral fluida y vistas apiladas (Stacked Widget).
 """
 from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QButtonGroup,
     QFrame,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QMainWindow,
     QPushButton,
+    QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -21,10 +23,11 @@ from PySide6.QtWidgets import (
 from ferrum.core.config import settings
 from ferrum.infrastructure.database.connection import db
 from ferrum.infrastructure.database.models import Product
+from ferrum.presentation.views.cctv_view import CCTVView
+from ferrum.presentation.views.pos_view import POSView
 
 
 class KPICard(QFrame):
-    """Tarjeta de resumen de métricas."""
     def __init__(self, title: str, value: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setProperty("class", "kpi_card")
@@ -45,72 +48,53 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("FERRUM POS — Control Industrial")
-        self.resize(1150, 700)
-        self.setMinimumSize(950, 600)
+        self.resize(1180, 720)
+        self.setMinimumSize(1000, 640)
 
-        # Cargar estilos QSS externos
         self._load_stylesheet()
 
-        # Layout Raíz (Horizontal: Sidebar + Contenido)
+        # Layout Raíz (Horizontal: Sidebar + Stacked Content)
         root_widget = QWidget(self)
         self.setCentralWidget(root_widget)
         root_layout = QHBoxLayout(root_widget)
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
 
-        # 1. Sidebar de navegación
+        # 1. Contenedor de Vistas Dinámicas
+        self.stack = QStackedWidget()
+
+        # Vista 0: Punto de Venta
+        self.view_pos = POSView(on_sale_completed_callback=self.load_inventory_data)
+        
+        # Vista 1: Inventario
+        self.view_inventory = self._build_inventory_view()
+
+        # Vista 2: Cerberus CCTV Real
+        self.view_cctv = CCTVView()
+
+        self.stack.addWidget(self.view_pos)        # Index 0
+        self.stack.addWidget(self.view_inventory)  # Index 1
+        self.stack.addWidget(self.view_cctv)       # Index 2
+
+        # 2. Sidebar
         sidebar = self._build_sidebar()
         root_layout.addWidget(sidebar)
 
-        # 2. Área principal de contenido
-        content_wrapper = QWidget()
-        content_layout = QVBoxLayout(content_wrapper)
-        content_layout.setContentsMargins(28, 24, 28, 0)
-        content_layout.setSpacing(20)
+        # 3. Contenedor Central con Header y Stack
+        content_container = QWidget()
+        content_layout = QVBoxLayout(content_container)
+        content_layout.setContentsMargins(28, 20, 28, 0)
+        content_layout.setSpacing(16)
 
-        # Header de sección
-        header_layout = QHBoxLayout()
-        view_title = QLabel("Inventario General")
-        view_title.setStyleSheet("font-size: 20px; font-weight: 700; color: #f8fafc;")
-        header_layout.addWidget(view_title)
-        header_layout.addStretch()
+        content_layout.addWidget(self.stack, stretch=1)
 
-        self.btn_refresh = QPushButton("Recargar Datos")
-        self.btn_refresh.setObjectName("btn_primary")
-        self.btn_refresh.clicked.connect(self.load_inventory_data)
-        header_layout.addWidget(self.btn_refresh)
-        content_layout.addLayout(header_layout)
-
-        # Tarjetas resumen (KPIs)
-        self.kpi_layout = QHBoxLayout()
-        self.kpi_layout.setSpacing(16)
-        self.card_total_items = KPICard("Total de Productos", "0")
-        self.card_stock_value = KPICard("Valor de Inventario", "$0.00")
-        self.card_system_mode = KPICard("Modo de Operación", "OFFLINE (SQLite)")
-        self.kpi_layout.addWidget(self.card_total_items)
-        self.kpi_layout.addWidget(self.card_stock_value)
-        self.kpi_layout.addWidget(self.card_system_mode)
-        content_layout.addLayout(self.kpi_layout)
-
-        # Tabla de productos
-        self.table = QTableWidget()
-        self.table.setColumnCount(6)
-        self.table.setHorizontalHeaderLabels([
-            "SKU", "Descripción del Producto", "Unidad", "Costo", "Precio Venta", "Stock Disponible"
-        ])
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        self.table.verticalHeader().setVisible(False)
-        self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        content_layout.addWidget(self.table)
-
-        # Barra de estado inferior discreta
+        # Barra de estado inferior
         status_bar = self._build_status_bar()
         content_layout.addWidget(status_bar)
 
-        root_layout.addWidget(content_wrapper, stretch=1)
+        root_layout.addWidget(content_container, stretch=1)
 
-        # Cargar datos desde SQLite
+        # Cargar datos iniciales
         self.load_inventory_data()
 
     def _load_stylesheet(self) -> None:
@@ -127,7 +111,7 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(16, 24, 16, 24)
         layout.setSpacing(8)
 
-        # Logo / Marca
+        # Logo
         brand_icon = QLabel("FERRUM")
         brand_icon.setObjectName("brand_title")
         brand_sub = QLabel("Industrial POS & CCTV")
@@ -136,31 +120,84 @@ class MainWindow(QMainWindow):
         layout.addWidget(brand_sub)
         layout.addSpacing(24)
 
-        # Botones de secciones
-        btn_pos = QPushButton("🛒  Punto de Venta")
-        btn_pos.setProperty("class", "nav_button")
-        
-        btn_inv = QPushButton("📦  Inventario")
-        btn_inv.setProperty("class", "nav_button")
-        btn_inv.setChecked(True)  # Activo por defecto
+        # Grupo de botones de navegación
+        self.nav_group = QButtonGroup(self)
+        self.nav_group.setExclusive(True)
 
-        btn_cctv = QPushButton("📹  Cerberus CCTV")
-        btn_cctv.setProperty("class", "nav_button")
+        self.btn_pos = QPushButton("🛒  Punto de Venta")
+        self.btn_pos.setCheckable(True)
+        self.btn_pos.setChecked(True)
+        self.btn_pos.setProperty("class", "nav_button")
+        self.btn_pos.clicked.connect(lambda: self.stack.setCurrentIndex(0))
 
-        btn_cfg = QPushButton("⚙️  Configuración")
-        btn_cfg.setProperty("class", "nav_button")
+        self.btn_inv = QPushButton("📦  Inventario")
+        self.btn_inv.setCheckable(True)
+        self.btn_inv.setProperty("class", "nav_button")
+        self.btn_inv.clicked.connect(lambda: self.stack.setCurrentIndex(1))
 
-        for b in [btn_pos, btn_inv, btn_cctv, btn_cfg]:
-            layout.addWidget(b)
+        self.btn_cctv = QPushButton("📹  Cerberus CCTV")
+        self.btn_cctv.setCheckable(True)
+        self.btn_cctv.setProperty("class", "nav_button")
+        self.btn_cctv.clicked.connect(lambda: self.stack.setCurrentIndex(2))
 
+        self.nav_group.addButton(self.btn_pos)
+        self.nav_group.addButton(self.btn_inv)
+        self.nav_group.addButton(self.btn_cctv)
+
+        layout.addWidget(self.btn_pos)
+        layout.addWidget(self.btn_inv)
+        layout.addWidget(self.btn_cctv)
         layout.addStretch()
 
-        # Versión en el pie del sidebar
         ver_lbl = QLabel("v0.1.0-alpha")
         ver_lbl.setStyleSheet("color: #475569; font-size: 11px;")
         layout.addWidget(ver_lbl)
 
         return sidebar
+
+    def _build_inventory_view(self) -> QWidget:
+        view = QWidget()
+        layout = QVBoxLayout(view)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(16)
+
+        # Header
+        header_layout = QHBoxLayout()
+        view_title = QLabel("Control de Inventario")
+        view_title.setStyleSheet("font-size: 18px; font-weight: 700; color: #f8fafc;")
+        header_layout.addWidget(view_title)
+        header_layout.addStretch()
+
+        btn_refresh = QPushButton("Recargar Datos")
+        btn_refresh.setObjectName("btn_primary")
+        btn_refresh.clicked.connect(self.load_inventory_data)
+        header_layout.addWidget(btn_refresh)
+        layout.addLayout(header_layout)
+
+        # KPIs
+        self.kpi_layout = QHBoxLayout()
+        self.kpi_layout.setSpacing(14)
+        self.card_total_items = KPICard("Total de Productos", "0")
+        self.card_stock_value = KPICard("Valor de Inventario", "$0.00")
+        self.card_system_mode = KPICard("Modo de Operación", "OFFLINE (SQLite)")
+        self.kpi_layout.addWidget(self.card_total_items)
+        self.kpi_layout.addWidget(self.card_stock_value)
+        self.kpi_layout.addWidget(self.card_system_mode)
+        layout.addLayout(self.kpi_layout)
+
+        # Tabla
+        self.table = QTableWidget()
+        self.table.setColumnCount(6)
+        self.table.setHorizontalHeaderLabels([
+            "SKU", "Descripción del Producto", "Unidad", "Costo", "Precio Venta", "Stock Disponible"
+        ])
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        layout.addWidget(self.table)
+
+        return view
 
     def _build_status_bar(self) -> QFrame:
         bar = QFrame()
@@ -181,7 +218,6 @@ class MainWindow(QMainWindow):
         return bar
 
     def load_inventory_data(self) -> None:
-        """Carga y recalcula métricas."""
         self.table.setRowCount(0)
         total_items = 0
         total_value = 0.0
@@ -194,34 +230,32 @@ class MainWindow(QMainWindow):
                 self.table.insertRow(row)
                 total_value += float(p.stock) * float(p.sale_price)
 
-                # Celda SKU
                 item_sku = QTableWidgetItem(p.sku)
                 item_sku.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 self.table.setItem(row, 0, item_sku)
 
-                # Descripción
                 self.table.setItem(row, 1, QTableWidgetItem(p.name))
 
-                # Unidad
                 item_unit = QTableWidgetItem(f"  {p.unit.value}  ")
                 item_unit.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 self.table.setItem(row, 2, item_unit)
 
-                # Costo
                 item_cost = QTableWidgetItem(f"${p.cost_price:.2f}")
                 item_cost.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                 self.table.setItem(row, 3, item_cost)
 
-                # Venta
                 item_price = QTableWidgetItem(f"${p.sale_price:.2f}")
                 item_price.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                 self.table.setItem(row, 4, item_price)
 
-                # Stock
                 item_stock = QTableWidgetItem(f"{p.stock:.3f}")
                 item_stock.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                 self.table.setItem(row, 5, item_stock)
 
-        # Actualizar Tarjetas KPI
         self.card_total_items.lbl_value.setText(str(total_items))
         self.card_stock_value.lbl_value.setText(f"${total_value:,.2f}")
+
+    def closeEvent(self, event) -> None:
+        """Asegura el cierre limpio de la cámara al cerrar la app."""
+        self.view_cctv.stop_stream()
+        super().closeEvent(event)

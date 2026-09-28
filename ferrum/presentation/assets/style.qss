@@ -137,3 +137,30 @@ QLabel.status_text {
     color: #64748b;
     font-family: monospace;
 }
+
+/* Diálogos y Alertas (QMessageBox) */
+QMessageBox {
+    background-color: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 8px;
+}
+
+QMessageBox QLabel {
+    color: #f8fafc;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+QMessageBox QPushButton {
+    background-color: #0284c7;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 18px;
+    font-weight: bold;
+    min-width: 80px;
+}
+
+QMessageBox QPushButton:hover {
+    background-color: #0369a1;
+}
